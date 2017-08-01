@@ -17,7 +17,8 @@
     "test:routes": "BABEL_DISABLE_CACHE=1 HTTP_PROXY= HTTPS_PROXY= TZ=US/Pacific mocha --env=environments/test.env --recursive --require babel-core/register --require babel-polyfill --compilers js:babel-register ./test/setup.js ./test/routes/**/*",
     "migrate:latest": "knex migrate:latest",
     "migrate:rollback": "knex migrate:rollback",
-    "generate-badges": "node scripts/badges.js"
+    "generate-badges": "node scripts/badges.js",
+    "poll-repositories": "babel --out-dir=dist src scripts/poller.js --copy-files && node dist/scripts/poller.js"
   },
   "repository": {
     "type": "git",
