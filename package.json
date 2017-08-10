@@ -18,7 +18,7 @@
     "migrate:latest": "knex migrate:latest",
     "migrate:rollback": "knex migrate:rollback",
     "generate-badges": "node scripts/badges.js",
-    "poll-repositories": "babel --out-dir=dist src scripts/poller.js --copy-files && node dist/scripts/poller.js"
+    "poll-repositories": "babel --out-dir=dist src scripts/poller.js --copy-files 2>&1 > /dev/null && node dist/scripts/poller.js"
   },
   "repository": {
     "type": "git",
