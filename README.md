@@ -27,13 +27,22 @@ Additionally, if the intention is to run the GitHub repository poller (`npm run 
     -H 'X-GitHub-OTP: <GH 2FA CODE IF ENABLED>' \
     -d '{"client_id": "c54ee622a3fa9622701f", \
          "client_secret": "2a6010d06c7c90b1fcf6518d72eac0bab64cf35b", \
-	 "note": "Buils.s.io poller token"}' | jq '.token' -r
+	 "note": "Build.s.io poller token"}' | jq '.token' -r
 
 `curl` will ask for you GitHub password (basic-auth) and acquire a 40-char authorization token. Make note of it, it should be set in the running environment as `GITHUB_AUTH_CLIENT_TOKEN`.
 
 
 #### Launchpad
-To connect to Launchpad, you need to set up a **username**, a **consumer key** and obtain an **API token** and an **API token secret**. Instructions for obtaining these details can be found [here](https://help.launchpad.net/API/SigningRequests).
+
+To connect to Launchpad, you need to set up a **username**, a **consumer key** and obtain an **API token** and an **API token secret**::
+
+  ./scripts/create-launchpad-credentials
+  ...
+
+It will print the details needed in the next section, for filling your environment file.
+
+If you need complete instructions for obtaining these details, they can be found [here](https://help.launchpad.net/API/SigningRequests).
+
 
 #### Env file
 To use the credentials from GitHub and Launchpad, you need to create an **env file**.
@@ -45,6 +54,7 @@ atom environments/dev.env
 Paste the following into the file and fill in the missing values:
 
 ```
+LP_API_URL=
 LP_API_USERNAME=
 LP_API_CONSUMER_KEY=
 LP_API_TOKEN=
