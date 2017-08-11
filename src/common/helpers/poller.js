@@ -13,7 +13,7 @@ const gh_repo_prefix = conf.get('GITHUB_REPOSITORY_PREFIX');
 const logger = logging.getLogger('poller');
 
 
-// Extracts unique repository URLs from a given (parsed) snapcraft.yaml
+// Extracts unique GH repository URLs from a given (parsed) snapcraft.yaml
 export function extractPartsToPoll(snapcraft_yaml) {
   const parts = Object.values(snapcraft_yaml.parts || {});
   const gh_parts = parts.filter(function (p) {
