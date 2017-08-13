@@ -36,6 +36,7 @@
   },
   "homepage": "https://github.com/canonical-ols/build.snapcraft.io-ui#readme",
   "dependencies": {
+    "async-lock": "^1.0.0",
     "babel-polyfill": "^6.16.0",
     "body-parser": "^1.15.2",
     "bookshelf": "^0.10.3",
