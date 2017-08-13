@@ -88,7 +88,6 @@ export const checkSnapRepository = async (owner, name, last_updated_at) => {
 let AsyncLock = require('async-lock');
 let processRepoLock = new AsyncLock();
 
-
 // Process a given Repository (DB) model. Check for changes using
 // `checkSnapRepository` and if changed request a LP snap build and mark
 // it as 'updated'.
@@ -112,3 +111,108 @@ export const processRepository = (repo) => {
     logger.info('==========');
   });
 };
+
+
+/// GitSourcePart encapsulates the relevant information from a snapcraft
+/// source part, and contains the methods to determine whether it's up to
+/// date.
+export class GitSourcePart {
+
+  constructor(repoUrl, branch, tag) {
+    if (repoUrl === undefined) {
+      throw new Error('Required parameter: repoUrl');
+    }
+    if (branch === undefined) {
+      branch = 'master'
+    }
+    this.repoUrl = repoUrl;
+    this.branch = branch;
+    this.tag = tag;
+  }
+
+  /** Extract a GitSourcePart from a snapcraft part definition.
+   *
+   * Returns a GitSourcePart instance if the source part meets the following
+   * criteria:
+   *
+   * - The source part has a source repository listed, and it's a github
+   *   hosted repository
+   */
+  static fromSnapcraftPart(part) {
+    // TODO: Warn if source-commit or source-subdir are set, since we don't
+    //       support these.
+    // TODO: Not sure if we can support setting tags _and_ branch in the same
+    //       part.
+    if (part.source == undefined) {
+      logger.info("Skipping part with no source set.")
+    } else if (part.source.startsWith(gh_repo_prefix)) {
+      return new GitSourcePart(
+        part['source'], part['source-branch'], part['source-tag']);
+    } else {
+      logger.info(
+        `Not checking ${part.source} as only github repos are supported`);
+    }
+  }
+
+  /** Determine if the source part has changed since `last_updated_at`
+   *
+   */
+  hasRepoChangedSince = async (last_updated_at, token) => {
+    if (last_updated_at === undefined || !last_updated_at) {
+      throw new Error('`last_updated_at` must be given.');
+    }
+    const last_updated = moment(last_updated_at);
+    const since = last_updated.toISOString();
+    const { owner, name } = parseGitHubRepoUrl(self.repoUrl);
+
+    const options = {
+      token,
+      headers: {
+        'If-Modified-Since': last_updated.format('ddd, MM MMM YYYY HH:mm:ss [GMT]')
+      },
+      json: true
+    };
+
+    if (this.branch === 'master' && this.tag == undefined) {
+      // check master branch, no tag.
+      const uri = `/repos/${owner}/${name}/commits?since=${since}`;
+      const response = await requestGitHub.get(uri, options);
+
+      switch (response.statusCode) {
+        case 200:
+          // If the (JSON encoded) body is not an empty list.
+          return response.body.length > 0;
+        case 304:
+          // `If-Modified-Since` in action, cache hit, no changes.
+          return false;
+        default:
+          // Bail, unexpected response.
+          throw new Error(
+            `${repositoryUrl} (${response.statusCode}): ${response.body.message}`);
+      }
+    }
+    else if (this.tag == undefined) {
+      // check custom branch, no tag.
+      const uri = `/repos/${owner}/${name}/branches/${this.branch}`;
+      const response = await requestGitHub.get(uri, options);
+
+      switch (response.statusCode) {
+        case 200:
+          // If the (JSON encoded) body is not an empty list.
+          return response.body.length > 0;
+        case 304:
+          // `If-Modified-Since` in action, cache hit, no changes.
+          return false;
+        default:
+          // Bail, unexpected response.
+          throw new Error(
+            `${repositoryUrl} (${response.statusCode}): ${response.body.message}`);
+      }
+    } else {
+      // check tag:
+      // TODO: How the hell do we support tags?
+    }
+  };
+
+
+}
