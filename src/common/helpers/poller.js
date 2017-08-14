@@ -2,6 +2,7 @@ import moment from 'moment';
 
 import logging from '../../server/logging';
 import { conf } from '../../server/helpers/config';
+import db from '../../server/db';
 import {
   getGitHubRepoUrl,
   parseGitHubRepoUrl
@@ -9,16 +10,92 @@ import {
 import requestGitHub from '../../server/helpers/github';
 import { internalGetSnapcraftYaml } from '../../server/handlers/launchpad';
 
-const gh_repo_prefix = conf.get('GITHUB_REPOSITORY_PREFIX');
+
 const logger = logging.getLogger('poller');
 
 
-// Extracts unique GH repository URLs from a given (parsed) snapcraft.yaml
-export function extractPartsToPoll(snapcraft_yaml) {
-  const parts = Object.values(snapcraft_yaml.parts || {});
-  const sourceParts = parts.map(GitSourcePart.fromSnapcraftPart).filter(part => part != undefined);
-  return Array.from(new Set(sourceParts));
-}
+// Process all Repository (DB) models synchronously. Check for changes using
+// `checkSnapRepository` and if changed request a LP snap build and mark
+// it as 'updated'.
+export const pollRepositories = (checker, builder) => {
+  logger.info('GitHub Repository Poller ...');
+
+  checker = checker || checkSnapRepository;
+  builder = builder || buildSnapRepository;
+
+  // XXX: meh! no ES6 import support, great library :-/
+  let AsyncLock = require('async-lock');
+  let pollRepoLock = new AsyncLock();
+
+  let repoDB = db.model('Repository');
+  return repoDB.fetchAll().then(function (results) {
+    logger.info(`Iterating over ${results.length} repositories.`);
+    results.models.forEach((repo) => {
+      pollRepoLock.acquire('PROCESS-REPO-SYNC', async () => {
+        const owner = repo.get('owner');
+        const name = repo.get('name');
+        const last_updated_at = repo.get('updated_at');
+
+        // XXX skip repos already updated recently.
+
+        logger.info(`${owner}/${name}: Polling ...`);
+        try {
+          if (await checker(owner, name, last_updated_at)) {
+            logger.info(`${owner}/${name}: NEEDSBUILD`);
+            await builder(owner, name);
+          } else {
+            logger.info(`${owner}/${name}: UNCHANGED`);
+          }
+        } catch (e) {
+          // XXX needs Sentry integration.
+          logger.error(`${owner}/${name}: FAILED (${e.message})`);
+        }
+        logger.info('==========');
+      });
+    });
+  });
+};
+
+
+// XXX Request a build of a given snap repository (in LP) and reset
+// `updated_at` (in DB).
+export const buildSnapRepository = async (owner, name) => {
+  return db.transaction(async (trx) => {
+    const row = await db.model('Repository')
+      .where({ owner, name })
+      .fetch({ transacting: trx });
+    await row.save({}, { method: 'update', transacting: trx });
+  });
+};
+
+
+// Whether a given snap (GitHub) repository has changed since 'last_updated_at'.
+// Consider changes in the repository itself as well as any of the (GitHub)
+// parts source.
+export const checkSnapRepository = async (owner, name, last_updated_at) => {
+  const token = conf.get('GITHUB_AUTH_CLIENT_TOKEN');
+  const repo_url = getGitHubRepoUrl(owner, name);
+  if (await hasRepoChanged(repo_url, last_updated_at, token)) {
+    logger.info(`The ${owner}/${name} repository has changed.`);
+    return true;
+  }
+  logger.info(`${owner}/${name}: unchanged, checking parts ...`);
+
+  let snapcraft_yaml;
+  try {
+    snapcraft_yaml = await internalGetSnapcraftYaml(owner, name, token);
+  } catch (e) {
+    return false;
+  }
+  for (const source_part of extractPartsToPoll(snapcraft_yaml.contents)) {
+    logger.info(`${owner}/${name}: Checking whether ${source_part.repoUrl} part has changed.`);
+    if (await source_part.hasRepoChangedSince(last_updated_at, token)) {
+      logger.info(`${owner}/${name}: ${source_part.repoUrl} changed.`);
+      return true;
+    }
+  }
+  return false;
+};
 
 
 // Whether a given (GitHub) repository has new commits since 'last_updated_at'.
@@ -55,62 +132,13 @@ export const hasRepoChanged = async (repositoryUrl, last_updated_at, token) => {
 };
 
 
-// Whether a given snap (GitHub) repository has changed since 'last_updated_at'.
-// Consider changes in the repository itself as well as any of the (GitHub)
-// parts source.
-export const checkSnapRepository = async (owner, name, last_updated_at) => {
-  const token = conf.get('GITHUB_AUTH_CLIENT_TOKEN');
-  const repo_url = getGitHubRepoUrl(owner, name);
-  if (await hasRepoChanged(repo_url, last_updated_at, token)) {
-    logger.info(`The ${owner}/${name} repository has changed.`);
-    return true;
-  }
-  logger.info(`${owner}/${name}: unchanged, checking parts ...`);
-
-  let snapcraft_yaml;
-  try {
-    snapcraft_yaml = await internalGetSnapcraftYaml(owner, name, token);
-  } catch (e) {
-    return false;
-  }
-  for (const source_part of extractPartsToPoll(snapcraft_yaml.contents)) {
-    logger.info(`${owner}/${name}: Checking whether $${source_part.repoUrl} part has changed.`);
-    if (await source_part.hasRepoChangedSince(last_updated_at, token)) {
-      logger.info(`${owner}/${name}: ${source_part.repoUrl} changed.`);
-      return true;
-    }
-  }
-  return false;
-};
-
-
-// XXX: meh no ES6 import support, great library :-/
-let AsyncLock = require('async-lock');
-let processRepoLock = new AsyncLock();
-
-// Process a given Repository (DB) model. Check for changes using
-// `checkSnapRepository` and if changed request a LP snap build and mark
-// it as 'updated'.
-export const processRepository = (repo) => {
-  processRepoLock.acquire('PROCESS-REPO-SYNC', async () => {
-    const owner = repo.get('owner');
-    const name = repo.get('name');
-    const last_updated_at = repo.get('updated_at');
-
-    logger.info(`${owner}/${name}: Polling ...`);
-    try {
-      if (await checkSnapRepository(owner, name, last_updated_at)) {
-        logger.info(`${owner}/${name}: NEEDSBUILD`);
-        // XXX request build and reset repo.updated_at.
-      } else {
-        logger.info(`${owner}/${name}: UNCHANGED`);
-      }
-    } catch (e) {
-      logger.error(`${owner}/${name}: FAILED (${e.message})`);
-    }
-    logger.info('==========');
-  });
-};
+// Extracts unique GH repository URLs from a given (parsed) snapcraft.yaml
+export function extractPartsToPoll(snapcraft_yaml) {
+  const parts = Object.values(snapcraft_yaml.parts || {});
+  const sourceParts = parts.map(
+    GitSourcePart.fromSnapcraftPart).filter(part => part != undefined);
+  return Array.from(new Set(sourceParts));
+}
 
 
 /// GitSourcePart encapsulates the relevant information from a snapcraft
@@ -143,6 +171,7 @@ export class GitSourcePart {
     //       support these.
     // TODO: Not sure if we can support setting tags _and_ branch in the same
     //       part.
+    const gh_repo_prefix = conf.get('GITHUB_REPOSITORY_PREFIX');
     if (part.source == undefined) {
       logger.info('Skipping part with no source set.');
     } else if (part.source.startsWith(gh_repo_prefix)) {

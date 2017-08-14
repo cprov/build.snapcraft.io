@@ -1,19 +1,108 @@
 import expect, { assert } from 'expect';
 import nock from 'nock';
+import sinon from 'sinon';
 
+import { conf } from '../../../../../src/server/helpers/config';
+import db from '../../../../../src/server/db';
 import {
   checkSnapRepository,
   extractPartsToPoll,
   hasRepoChanged,
+  pollRepositories,
   GitSourcePart
 } from '../../../../../src/common/helpers/poller';
-import { conf } from '../../../../../src/server/helpers/config';
 
 
 describe('Poller helpers', function() {
+
   afterEach(function() {
     nock.cleanAll();
   });
+
+  describe('pollRepositories', function() {
+    let clock;
+
+    beforeEach(async () => {
+      clock = sinon.useFakeTimers(new Date().getTime());
+      await db.model('GitHubUser').query('truncate').fetch();
+      await db.model('Repository').query('truncate').fetch();
+    });
+
+    afterEach(() => {
+      clock.restore();
+    });
+
+    context('when there are no repositories', function() {
+      it('does nothing', async () => {
+        let checker = sinon.spy();
+        let builder = sinon.spy();
+        await pollRepositories(checker, builder);
+        expect(checker.callCount).toBe(0);
+        expect(builder.callCount).toBe(0);
+      });
+    });
+
+    context('when there are repositories with no changes', function() {
+      it('gets built', () => {
+        return db.transaction(async (trx) => {
+          const db_user = db.model('GitHubUser').forge({
+            github_id: 1234,
+            name: null,
+            login: 'person',
+            last_login_at: new Date()
+          });
+          await db_user.save({}, { transacting: trx });
+          const db_repo = db.model('Repository').forge({
+            owner: 'anowner',
+            name: 'aname',
+            snapcraft_name: 'foo',
+            store_name: 'a_store',
+            registrant_id: db_user.get('id')
+          });
+          await db_repo.save({}, { transacting: trx });
+        }).then(async () => {
+          let checker = sinon.stub().returns(false);
+          let builder = sinon.spy();
+          await pollRepositories(checker, builder);
+          expect(checker.callCount).toBe(1);
+          expect(checker.calledWithMatch('anowner', 'aname')).toBe(true);
+          expect(builder.callCount).toBe(0);
+        });
+      });
+    });
+
+    context('when there are repositories with changes', function() {
+      it('gets built', () => {
+        return db.transaction(async (trx) => {
+          const db_user = db.model('GitHubUser').forge({
+            github_id: 1234,
+            name: null,
+            login: 'person',
+            last_login_at: new Date()
+          });
+          await db_user.save({}, { transacting: trx });
+          const db_repo = db.model('Repository').forge({
+            owner: 'anowner',
+            name: 'aname',
+            snapcraft_name: 'foo',
+            store_name: 'a_store',
+            registrant_id: db_user.get('id')
+          });
+          await db_repo.save({}, { transacting: trx });
+        }).then(async () => {
+          let checker = sinon.stub().returns(true);
+          let builder = sinon.spy();
+          await pollRepositories(checker, builder);
+          expect(checker.callCount).toBe(1);
+          expect(checker.calledWithMatch('anowner', 'aname')).toBe(true);
+          expect(builder.callCount).toBe(1);
+          expect(builder.calledWith('anowner', 'aname')).toBe(true);
+        });
+      });
+    });
+
+  });
+
 
   describe('GitSourcePart helper class construction', function() {
 
@@ -274,6 +363,7 @@ describe('Poller helpers', function() {
 
 
   });
+
 
   context('extractPartsToPoll', () => {
 
