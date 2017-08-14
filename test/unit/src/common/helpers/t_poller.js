@@ -20,37 +20,37 @@ describe('Poller helpers', function() {
     const repoUrl = 'https://github.com/anowner/aname';
 
     it('requires a git url', () => {
-      expect(() => {new GitSourcePart()}).toThrow(
+      expect(() => {new GitSourcePart();}).toThrow(
         'Required parameter: repoUrl');
-    })
+    });
 
     it('can be constructed with just a git url', () => {
       var foo = new GitSourcePart(repoUrl);
       expect(foo.repoUrl).toEqual(repoUrl);
       expect(foo.branch).toEqual('master');
       expect(foo.tag).toEqual(null);
-    })
+    });
 
     it('can be constructed with a git url and branch name', () => {
       var foo = new GitSourcePart(repoUrl, 'mybranch');
       expect(foo.repoUrl).toEqual(repoUrl);
       expect(foo.branch).toEqual('mybranch');
       expect(foo.tag).toEqual(null);
-    })
+    });
 
     it('can be constructed with a git url and tag name', () => {
       var foo = new GitSourcePart(repoUrl, undefined, 'v1.0.0');
       expect(foo.repoUrl).toEqual(repoUrl);
       expect(foo.branch).toEqual('master');
       expect(foo.tag).toEqual('v1.0.0');
-    })
+    });
 
     it('can be constructed with a git url and branch and tag name', () => {
       var foo = new GitSourcePart(repoUrl, 'mybranch', 'v1.0.0');
       expect(foo.repoUrl).toEqual(repoUrl);
       expect(foo.branch).toEqual('mybranch');
       expect(foo.tag).toEqual('v1.0.0');
-    })
+    });
   });
 
   describe('GitSourcePart construction from snapcraft source part', () => {
@@ -61,7 +61,7 @@ describe('Poller helpers', function() {
 
     it('copes with missing source-type', () => {
       var part = GitSourcePart.fromSnapcraftPart(
-        {source: 'https://github.com/foo/bar.git'});
+        { source: 'https://github.com/foo/bar.git' });
       expect(part.repoUrl).toEqual('https://github.com/foo/bar.git');
       expect(part.branch).toEqual('master');
       expect(part.tag).toBe(undefined);
@@ -69,7 +69,7 @@ describe('Poller helpers', function() {
 
     it('skips non-github repositories', () => {
       var part = GitSourcePart.fromSnapcraftPart(
-        {source: 'https://git.launchpad.net/foo/bar.git'});
+        { source: 'https://git.launchpad.net/foo/bar.git' });
       expect(part).toBe(undefined);
     });
 

@@ -123,7 +123,7 @@ export class GitSourcePart {
       throw new Error('Required parameter: repoUrl');
     }
     if (branch === undefined) {
-      branch = 'master'
+      branch = 'master';
     }
     this.repoUrl = repoUrl;
     this.branch = branch;
@@ -144,7 +144,7 @@ export class GitSourcePart {
     // TODO: Not sure if we can support setting tags _and_ branch in the same
     //       part.
     if (part.source == undefined) {
-      logger.info("Skipping part with no source set.")
+      logger.info('Skipping part with no source set.');
     } else if (part.source.startsWith(gh_repo_prefix)) {
       var sourceUrl = part['source'];
       var sourceBranch = part['source-branch'];
@@ -196,7 +196,7 @@ export class GitSourcePart {
         default:
           // Bail, unexpected response.
           throw new Error(
-            `${repositoryUrl} (${response.statusCode}): ${response.body.message}`);
+            `${this.repoUrl} (${response.statusCode}): ${response.body.message}`);
       }
     }
     else if (this.tag == undefined) {
@@ -205,12 +205,13 @@ export class GitSourcePart {
       const response = await requestGitHub.get(uri, options);
 
       switch (response.statusCode) {
-        case 200:
+        case 200: {
           // Check the branch modification time. The GH API is kind of crazy
           // here:
           const date_string = response.body.commit.commit.committer.date;
           const branch_date = moment(date_string);
           return branch_date.isAfter(last_updated);
+        }
         case 304:
           // `If-Modified-Since` in action, cache hit, no changes.
           // TODO: This doesn't seem to work with the branches API.
@@ -218,13 +219,12 @@ export class GitSourcePart {
         default:
           // Bail, unexpected response.
           throw new Error(
-            `${repositoryUrl} (${response.statusCode}): ${response.body.message}`);
+            `${this.repoUrl} (${response.statusCode}): ${response.body.message}`);
       }
     } else {
       // check tag:
       // TODO: How the hell do we support tags?
     }
-  };
-
+  }
 
 }
