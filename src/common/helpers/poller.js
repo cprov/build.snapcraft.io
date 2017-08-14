@@ -18,11 +18,6 @@ export function extractPartsToPoll(snapcraft_yaml) {
   const parts = Object.values(snapcraft_yaml.parts || {});
   const sourceParts = parts.map(GitSourcePart.fromSnapcraftPart).filter(part => part != undefined);
   return Array.from(new Set(sourceParts));
-  // const gh_parts = parts.filter(function (p) {
-  //   return (p.source || '').startsWith(gh_repo_prefix);
-  // });
-  // const repo_urls = gh_parts.map(function (p) { return p.source; });
-  // return Array.from(new Set(repo_urls));
 }
 
 
@@ -67,6 +62,7 @@ export const checkSnapRepository = async (owner, name, last_updated_at) => {
   const token = conf.get('GITHUB_AUTH_CLIENT_TOKEN');
   const repo_url = getGitHubRepoUrl(owner, name);
   if (await hasRepoChanged(repo_url, last_updated_at, token)) {
+    logger.info(`The ${owner}/${name} repository has changed.`);
     return true;
   }
   logger.info(`${owner}/${name}: unchanged, checking parts ...`);
@@ -78,6 +74,7 @@ export const checkSnapRepository = async (owner, name, last_updated_at) => {
     return false;
   }
   for (const source_part of extractPartsToPoll(snapcraft_yaml.contents)) {
+    logger.info(`${owner}/${name}: Checking whether $${source_part.repoUrl} part has changed.`);
     if (await source_part.hasRepoChangedSince(last_updated_at, token)) {
       logger.info(`${owner}/${name}: ${source_part.repoUrl} changed.`);
       return true;
@@ -209,10 +206,14 @@ export class GitSourcePart {
 
       switch (response.statusCode) {
         case 200:
-          // If the (JSON encoded) body is not an empty list.
-          return response.body.length > 0;
+          // Check the branch modification time. The GH API is kind of crazy
+          // here:
+          const date_string = response.body.commit.commit.committer.date;
+          const branch_date = moment(date_string);
+          return branch_date.isAfter(last_updated);
         case 304:
           // `If-Modified-Since` in action, cache hit, no changes.
+          // TODO: This doesn't seem to work with the branches API.
           return false;
         default:
           // Bail, unexpected response.
