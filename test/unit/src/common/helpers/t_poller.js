@@ -4,7 +4,8 @@ import nock from 'nock';
 import {
   checkSnapRepository,
   extractPartsToPoll,
-  hasRepoChanged
+  hasRepoChanged,
+  GitSourcePart
 } from '../../../../../src/common/helpers/poller';
 import { conf } from '../../../../../src/server/helpers/config';
 
@@ -13,6 +14,86 @@ describe('Poller helpers', function() {
   afterEach(function() {
     nock.cleanAll();
   });
+
+  describe('GitSourcePart helper class construction', function() {
+
+    const repoUrl = 'https://github.com/anowner/aname';
+
+    it('requires a git url', () => {
+      expect(() => {new GitSourcePart()}).toThrow(
+        'Required parameter: repoUrl');
+    })
+
+    it('can be constructed with just a git url', () => {
+      var foo = new GitSourcePart(repoUrl);
+      expect(foo.repoUrl).toEqual(repoUrl);
+      expect(foo.branch).toEqual('master');
+      expect(foo.tag).toEqual(null);
+    })
+
+    it('can be constructed with a git url and branch name', () => {
+      var foo = new GitSourcePart(repoUrl, 'mybranch');
+      expect(foo.repoUrl).toEqual(repoUrl);
+      expect(foo.branch).toEqual('mybranch');
+      expect(foo.tag).toEqual(null);
+    })
+
+    it('can be constructed with a git url and tag name', () => {
+      var foo = new GitSourcePart(repoUrl, undefined, 'v1.0.0');
+      expect(foo.repoUrl).toEqual(repoUrl);
+      expect(foo.branch).toEqual('master');
+      expect(foo.tag).toEqual('v1.0.0');
+    })
+
+    it('can be constructed with a git url and branch and tag name', () => {
+      var foo = new GitSourcePart(repoUrl, 'mybranch', 'v1.0.0');
+      expect(foo.repoUrl).toEqual(repoUrl);
+      expect(foo.branch).toEqual('mybranch');
+      expect(foo.tag).toEqual('v1.0.0');
+    })
+  });
+
+  describe('GitSourcePart construction from snapcraft source part', () => {
+    it('copes with missing parts', () => {
+      var part = GitSourcePart.fromSnapcraftPart({});
+      expect(part).toBe(undefined);
+    });
+
+    it('copes with missing source-type', () => {
+      var part = GitSourcePart.fromSnapcraftPart(
+        {source: 'https://github.com/foo/bar.git'});
+      expect(part.repoUrl).toEqual('https://github.com/foo/bar.git');
+      expect(part.branch).toEqual('master');
+      expect(part.tag).toBe(undefined);
+    });
+
+    it('skips non-github repositories', () => {
+      var part = GitSourcePart.fromSnapcraftPart(
+        {source: 'https://git.launchpad.net/foo/bar.git'});
+      expect(part).toBe(undefined);
+    });
+
+    it('extracts source-branch', () => {
+      var part = GitSourcePart.fromSnapcraftPart(
+        {
+          'source': 'https://github.com/foo/bar.git',
+          'source-branch': 'foo',
+        });
+      expect(part.repoUrl).toEqual('https://github.com/foo/bar.git');
+      expect(part.branch).toEqual('foo');
+      expect(part.tag).toBe(undefined);
+    });
+
+    it('does not support source-tag', () => {
+      var part = GitSourcePart.fromSnapcraftPart(
+        {
+          'source': 'https://github.com/foo/bar.git',
+          'source-tag': 'foo',
+        });
+      expect(part).toBe(undefined);
+    });
+  });
+
 
   describe('hasRepoChanged', function() {
     let ghApi;
@@ -211,7 +292,8 @@ describe('Poller helpers', function() {
         }
       };
       const parts = extractPartsToPoll(snapcraft_yaml);
-      expect(parts).toEqual(['https://github.com/foo/bar.git']);
+      expect(parts.length).toEqual(1);
+      expect(parts[0].repoUrl).toBe('https://github.com/foo/bar.git');
     });
 
     it('only extracts GH repos', () => {
@@ -232,25 +314,9 @@ describe('Poller helpers', function() {
         }
       };
       const parts = extractPartsToPoll(snapcraft_yaml);
-      expect(parts).toEqual([
-        'https://github.com/foo/bar.git',
-        'https://github.com/foo/zoing.git'
-      ]);
-    });
-
-    it('returns unique repos', () => {
-      const snapcraft_yaml = {
-        parts: {
-          'gh': {
-            'source': 'https://github.com/foo/bar.git'
-          },
-          'gh-2': {
-            'source': 'https://github.com/foo/bar.git'
-          }
-        }
-      };
-      const parts = extractPartsToPoll(snapcraft_yaml);
-      expect(parts).toEqual(['https://github.com/foo/bar.git']);
+      expect(parts.length).toBe(2);
+      expect(parts[0].repoUrl).toEqual('https://github.com/foo/bar.git');
+      expect(parts[1].repoUrl).toEqual('https://github.com/foo/zoing.git');
     });
 
   });
