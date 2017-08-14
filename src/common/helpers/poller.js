@@ -16,11 +16,13 @@ const logger = logging.getLogger('poller');
 // Extracts unique GH repository URLs from a given (parsed) snapcraft.yaml
 export function extractPartsToPoll(snapcraft_yaml) {
   const parts = Object.values(snapcraft_yaml.parts || {});
-  const gh_parts = parts.filter(function (p) {
-    return (p.source || '').startsWith(gh_repo_prefix);
-  });
-  const repo_urls = gh_parts.map(function (p) { return p.source; });
-  return Array.from(new Set(repo_urls));
+  const sourceParts = parts.map(GitSourcePart.fromSnapcraftPart).filter(part => part != undefined);
+  return Array.from(new Set(sourceParts));
+  // const gh_parts = parts.filter(function (p) {
+  //   return (p.source || '').startsWith(gh_repo_prefix);
+  // });
+  // const repo_urls = gh_parts.map(function (p) { return p.source; });
+  // return Array.from(new Set(repo_urls));
 }
 
 
@@ -59,7 +61,8 @@ export const hasRepoChanged = async (repositoryUrl, last_updated_at, token) => {
 
 
 // Whether a given snap (GitHub) repository has changed since 'last_updated_at'.
-// Consider changes in the repository itself any of the (GitHub) parts source.
+// Consider changes in the repository itself as well as any of the (GitHub)
+// parts source.
 export const checkSnapRepository = async (owner, name, last_updated_at) => {
   const token = conf.get('GITHUB_AUTH_CLIENT_TOKEN');
   const repo_url = getGitHubRepoUrl(owner, name);
@@ -74,9 +77,9 @@ export const checkSnapRepository = async (owner, name, last_updated_at) => {
   } catch (e) {
     return false;
   }
-  for (const repo_url of extractPartsToPoll(snapcraft_yaml.contents)) {
-    if (await hasRepoChanged(repo_url, last_updated_at, token)) {
-      logger.info(`${owner}/${name}: ${repo_url} changed.`);
+  for (const source_part of extractPartsToPoll(snapcraft_yaml.contents)) {
+    if (await source_part.hasRepoChangedSince(last_updated_at, token)) {
+      logger.info(`${owner}/${name}: ${source_part.repoUrl} changed.`);
       return true;
     }
   }
@@ -146,8 +149,16 @@ export class GitSourcePart {
     if (part.source == undefined) {
       logger.info("Skipping part with no source set.")
     } else if (part.source.startsWith(gh_repo_prefix)) {
-      return new GitSourcePart(
-        part['source'], part['source-branch'], part['source-tag']);
+      var sourceUrl = part['source'];
+      var sourceBranch = part['source-branch'];
+      var sourceTag = part['source-tag'];
+      // TODO: figure out tag support:
+      if (sourceTag) {
+        logger.info(
+          `Not checking ${sourceUrl} with tag ${sourceTag} since tags are not supported`);
+        return;
+      }
+      return new GitSourcePart(sourceUrl, sourceBranch, sourceTag);
     } else {
       logger.info(
         `Not checking ${part.source} as only github repos are supported`);
@@ -157,13 +168,13 @@ export class GitSourcePart {
   /** Determine if the source part has changed since `last_updated_at`
    *
    */
-  hasRepoChangedSince = async (last_updated_at, token) => {
+  async hasRepoChangedSince(last_updated_at, token) {
     if (last_updated_at === undefined || !last_updated_at) {
       throw new Error('`last_updated_at` must be given.');
     }
     const last_updated = moment(last_updated_at);
     const since = last_updated.toISOString();
-    const { owner, name } = parseGitHubRepoUrl(self.repoUrl);
+    const { owner, name } = parseGitHubRepoUrl(this.repoUrl);
 
     const options = {
       token,

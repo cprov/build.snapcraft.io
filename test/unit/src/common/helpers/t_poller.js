@@ -64,7 +64,7 @@ describe('Poller helpers', function() {
         {source: 'https://github.com/foo/bar.git'});
       expect(part.repoUrl).toEqual('https://github.com/foo/bar.git');
       expect(part.branch).toEqual('master');
-      expect(part.tag).toEqual(undefined);
+      expect(part.tag).toBe(undefined);
     });
 
     it('skips non-github repositories', () => {
@@ -81,30 +81,16 @@ describe('Poller helpers', function() {
         });
       expect(part.repoUrl).toEqual('https://github.com/foo/bar.git');
       expect(part.branch).toEqual('foo');
-      expect(part.tag).toEqual(undefined);
+      expect(part.tag).toBe(undefined);
     });
 
-    it('extracts source-tag', () => {
+    it('does not support source-tag', () => {
       var part = GitSourcePart.fromSnapcraftPart(
         {
           'source': 'https://github.com/foo/bar.git',
           'source-tag': 'foo',
         });
-      expect(part.repoUrl).toEqual('https://github.com/foo/bar.git');
-      expect(part.branch).toEqual('master');
-      expect(part.tag).toEqual('foo');
-    });
-
-    it('extracts source-branch and source-branch', () => {
-      var part = GitSourcePart.fromSnapcraftPart(
-        {
-          'source': 'https://github.com/foo/bar.git',
-          'source-branch': 'wibble',
-          'source-tag': 'foo',
-        });
-      expect(part.repoUrl).toEqual('https://github.com/foo/bar.git');
-      expect(part.branch).toEqual('wibble');
-      expect(part.tag).toEqual('foo');
+      expect(part).toBe(undefined);
     });
   });
 
@@ -306,7 +292,8 @@ describe('Poller helpers', function() {
         }
       };
       const parts = extractPartsToPoll(snapcraft_yaml);
-      expect(parts).toEqual(['https://github.com/foo/bar.git']);
+      expect(parts.length).toEqual(1);
+      expect(parts[0].repoUrl).toBe('https://github.com/foo/bar.git');
     });
 
     it('only extracts GH repos', () => {
@@ -327,25 +314,9 @@ describe('Poller helpers', function() {
         }
       };
       const parts = extractPartsToPoll(snapcraft_yaml);
-      expect(parts).toEqual([
-        'https://github.com/foo/bar.git',
-        'https://github.com/foo/zoing.git'
-      ]);
-    });
-
-    it('returns unique repos', () => {
-      const snapcraft_yaml = {
-        parts: {
-          'gh': {
-            'source': 'https://github.com/foo/bar.git'
-          },
-          'gh-2': {
-            'source': 'https://github.com/foo/bar.git'
-          }
-        }
-      };
-      const parts = extractPartsToPoll(snapcraft_yaml);
-      expect(parts).toEqual(['https://github.com/foo/bar.git']);
+      expect(parts.length).toBe(2);
+      expect(parts[0].repoUrl).toEqual('https://github.com/foo/bar.git');
+      expect(parts[1].repoUrl).toEqual('https://github.com/foo/zoing.git');
     });
 
   });
