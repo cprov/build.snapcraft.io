@@ -38,7 +38,7 @@ export const pollRepositories = (checker, builder) => {
 
         // XXX skip repos already updated recently, create a new datetime
         // column exclusively for the poller.
-        const last_polled_at = repo.get('updated_at');
+        const last_polled_at = repo.get('polled_at') || repo.get('updated_at');
 
         if (!repo.get('snapcraft_name')) {
           logger.info(`${owner}/${name}: NO SNAPCRAFT.YAML`);
@@ -64,18 +64,6 @@ export const pollRepositories = (checker, builder) => {
         logger.info('==========');
       });
     });
-  });
-};
-
-
-// XXX Request a build of a given snap repository (in LP) and reset
-// `updated_at` (in DB).
-export const buildSnapRepository = async (owner, name) => {
-  return db.transaction(async (trx) => {
-    const row = await db.model('Repository')
-      .where({ owner, name })
-      .fetch({ transacting: trx });
-    await row.save({}, { method: 'update', transacting: trx });
   });
 };
 
@@ -106,6 +94,20 @@ export const checkSnapRepository = async (owner, name, last_polled_at) => {
     }
   }
   return false;
+};
+
+
+// Request a build of a given snap repository (in LP) and update `polled_at` (in DB).
+export const buildSnapRepository = async (owner, name) => {
+  const _now = new Date().getTime();
+  // XXX request LP build
+  // const repo_url = getGitHubRepoUrl(owner, name);
+  return db.transaction(async (trx) => {
+    const row = await db.model('Repository')
+      .where({ owner, name })
+      .fetch({ transacting: trx });
+    await row.save({ polled_at: _now }, { method: 'update', transacting: trx });
+  });
 };
 
 
