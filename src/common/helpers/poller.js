@@ -9,16 +9,17 @@ import {
 } from './github-url';
 import requestGitHub from '../../server/helpers/github';
 import { internalGetSnapcraftYaml } from '../../server/handlers/launchpad';
-
+import raven from 'raven';
 
 const logger = logging.getLogger('poller');
-
+raven.config(conf.get('SENTRY_DSN')).install();
 
 // Process all Repository (DB) models synchronously. Check for changes using
 // `checkSnapRepository` and if changed request a LP snap build and mark
 // it as 'updated'.
 export const pollRepositories = (checker, builder) => {
   logger.info('GitHub Repository Poller ...');
+  var raven_client = raven.Client(conf.get('SENTRY_DSN'));
 
   checker = checker || checkSnapRepository;
   builder = builder || buildSnapRepository;
@@ -56,7 +57,7 @@ export const pollRepositories = (checker, builder) => {
             logger.info(`${owner}/${name}: UNCHANGED`);
           }
         } catch (e) {
-          // XXX needs Sentry integration.
+          raven_client.captureException(e);
           logger.error(`${owner}/${name}: FAILED (${e.message})`);
         }
         logger.info('==========');
