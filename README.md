@@ -102,3 +102,21 @@ ubuntu@build-snapcraft-io:~/work$ npm test
 
 Emacs is confused if 'build.snapcraft.io' is used in the project directory
 name, using 'build-snapcraft-io' restores sanity.
+
+## Updating dependencies
+
+Managing dependencies with npm can be a little .... interesting, especially if
+you're not used to the peculiarities of the nodejs toolchain.
+
+First, you must add or update the dependency in package.json. This file
+contains both a 'dependencies' section (for run-time dependencies) and a
+'devDependencies' section (for build-time dependencies). Edit the appropriate
+section to add/remove/edit the dependencies that you care about. Version
+numbers are specified using a [special syntax](https://docs.npmjs.com/misc/semver#prerelease-identifiers).
+
+Next, run `npm update` to get the new dependencies locally.
+
+Finally, run `./node_modules/shonkwrap/shonkwrap` (I wish I was joking) to
+update the `npm-shrinkwrap.json` file with the new frozen dependency set.
+The `shonkwrap` command wraps `npm shrinkwrap`, but removes the 'resolved'
+keys from the final shrinkwrapped file.
