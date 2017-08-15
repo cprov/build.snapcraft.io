@@ -38,7 +38,16 @@ export const pollRepositories = (checker, builder) => {
 
         // XXX skip repos already updated recently.
 
-        logger.info(`${owner}/${name}: Polling ...`);
+        if (!repo.get('snapcraft_name')) {
+          logger.info(`${owner}/${name}: NO SNAPCRAFT.YAML`);
+          return;
+        }
+
+        if (!repo.get('store_name')) {
+          logger.info(`${owner}/${name}: NOT REGISTERED`);
+          return;
+        }
+
         try {
           if (await checker(owner, name, last_updated_at)) {
             logger.info(`${owner}/${name}: NEEDSBUILD`);

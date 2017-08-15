@@ -20,16 +20,10 @@ describe('Poller helpers', function() {
   });
 
   describe('pollRepositories', function() {
-    let clock;
 
     beforeEach(async () => {
-      clock = sinon.useFakeTimers(new Date().getTime());
       await db.model('GitHubUser').query('truncate').fetch();
       await db.model('Repository').query('truncate').fetch();
-    });
-
-    afterEach(() => {
-      clock.restore();
     });
 
     context('when there are no repositories', function() {
@@ -42,8 +36,36 @@ describe('Poller helpers', function() {
       });
     });
 
-    context('when there are repositories with no changes', function() {
-      it('gets built', () => {
+    context('when the repository has no snapcraft.yaml', function() {
+      it('gets skipped', () => {
+        return db.transaction(async (trx) => {
+          const db_user = db.model('GitHubUser').forge({
+            github_id: 1234,
+            name: null,
+            login: 'person',
+            last_login_at: new Date()
+          });
+          await db_user.save({}, { transacting: trx });
+          const db_repo = db.model('Repository').forge({
+            owner: 'anowner',
+            name: 'aname',
+            snapcraft_name: null,
+            store_name: null,
+            registrant_id: db_user.get('id')
+          });
+          await db_repo.save({}, { transacting: trx });
+        }).then(async () => {
+          let checker = sinon.spy();
+          let builder = sinon.spy();
+          await pollRepositories(checker, builder);
+          expect(checker.callCount).toBe(0);
+          expect(builder.callCount).toBe(0);
+        });
+      });
+    });
+
+    context('when the repository has name registered in the store', function() {
+      it('gets skipped', () => {
         return db.transaction(async (trx) => {
           const db_user = db.model('GitHubUser').forge({
             github_id: 1234,
@@ -56,7 +78,35 @@ describe('Poller helpers', function() {
             owner: 'anowner',
             name: 'aname',
             snapcraft_name: 'foo',
-            store_name: 'a_store',
+            store_name: null,
+            registrant_id: db_user.get('id')
+          });
+          await db_repo.save({}, { transacting: trx });
+        }).then(async () => {
+          let checker = sinon.spy();
+          let builder = sinon.spy();
+          await pollRepositories(checker, builder);
+          expect(checker.callCount).toBe(0);
+          expect(builder.callCount).toBe(0);
+        });
+      });
+    });
+
+    context('when there are repositories with no changes', function() {
+      it('gets checked, but not built', () => {
+        return db.transaction(async (trx) => {
+          const db_user = db.model('GitHubUser').forge({
+            github_id: 1234,
+            name: null,
+            login: 'person',
+            last_login_at: new Date()
+          });
+          await db_user.save({}, { transacting: trx });
+          const db_repo = db.model('Repository').forge({
+            owner: 'anowner',
+            name: 'aname',
+            snapcraft_name: 'foo',
+            store_name: 'foo',
             registrant_id: db_user.get('id')
           });
           await db_repo.save({}, { transacting: trx });
@@ -85,7 +135,7 @@ describe('Poller helpers', function() {
             owner: 'anowner',
             name: 'aname',
             snapcraft_name: 'foo',
-            store_name: 'a_store',
+            store_name: 'foo',
             registrant_id: db_user.get('id')
           });
           await db_repo.save({}, { transacting: trx });
