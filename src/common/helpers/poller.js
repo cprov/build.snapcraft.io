@@ -34,9 +34,10 @@ export const pollRepositories = (checker, builder) => {
       pollRepoLock.acquire('PROCESS-REPO-SYNC', async () => {
         const owner = repo.get('owner');
         const name = repo.get('name');
-        const last_updated_at = repo.get('updated_at');
 
-        // XXX skip repos already updated recently.
+        // XXX skip repos already updated recently, create a new datetime
+        // column exclusively for the poller.
+        const last_polled_at = repo.get('updated_at');
 
         if (!repo.get('snapcraft_name')) {
           logger.info(`${owner}/${name}: NO SNAPCRAFT.YAML`);
@@ -49,7 +50,7 @@ export const pollRepositories = (checker, builder) => {
         }
 
         try {
-          if (await checker(owner, name, last_updated_at)) {
+          if (await checker(owner, name, last_polled_at)) {
             logger.info(`${owner}/${name}: NEEDSBUILD`);
             await builder(owner, name);
           } else {
@@ -78,13 +79,13 @@ export const buildSnapRepository = async (owner, name) => {
 };
 
 
-// Whether a given snap (GitHub) repository has changed since 'last_updated_at'.
+// Whether a given snap (GitHub) repository has changed since 'last_polled_at'.
 // Consider changes in the repository itself as well as any of the (GitHub)
 // parts source.
-export const checkSnapRepository = async (owner, name, last_updated_at) => {
+export const checkSnapRepository = async (owner, name, last_polled_at) => {
   const token = conf.get('GITHUB_AUTH_CLIENT_TOKEN');
   const repo_url = getGitHubRepoUrl(owner, name);
-  if (await hasRepoChanged(repo_url, last_updated_at, token)) {
+  if (await hasRepoChanged(repo_url, last_polled_at, token)) {
     logger.info(`The ${owner}/${name} repository has changed.`);
     return true;
   }
@@ -98,7 +99,7 @@ export const checkSnapRepository = async (owner, name, last_updated_at) => {
   }
   for (const source_part of extractPartsToPoll(snapcraft_yaml.contents)) {
     logger.info(`${owner}/${name}: Checking whether ${source_part.repoUrl} part has changed.`);
-    if (await source_part.hasRepoChangedSince(last_updated_at, token)) {
+    if (await source_part.hasRepoChangedSince(last_polled_at, token)) {
       logger.info(`${owner}/${name}: ${source_part.repoUrl} changed.`);
       return true;
     }
@@ -107,19 +108,19 @@ export const checkSnapRepository = async (owner, name, last_updated_at) => {
 };
 
 
-// Whether a given (GitHub) repository has new commits since 'last_updated_at'.
-export const hasRepoChanged = async (repositoryUrl, last_updated_at, token) => {
-  if (last_updated_at === undefined || !last_updated_at) {
-    throw new Error('`last_updated_at` must be given.');
+// Whether a given (GitHub) repository has new commits since 'last_polled_at'.
+export const hasRepoChanged = async (repositoryUrl, last_polled_at, token) => {
+  if (last_polled_at === undefined || !last_polled_at) {
+    throw new Error('`last_polled_at` must be given.');
   }
-  const last_updated = moment(last_updated_at);
-  const since = last_updated.toISOString();
+  const last_polled = moment(last_polled_at);
+  const since = last_polled.toISOString();
   const { owner, name } = parseGitHubRepoUrl(repositoryUrl);
   const uri = `/repos/${owner}/${name}/commits?since=${since}`;
   const options = {
     token,
     headers: {
-      'If-Modified-Since': last_updated.format('ddd, MM MMM YYYY HH:mm:ss [GMT]')
+      'If-Modified-Since': last_polled.format('ddd, MM MMM YYYY HH:mm:ss [GMT]')
     },
     json: true
   };
@@ -200,21 +201,21 @@ export class GitSourcePart {
     }
   }
 
-  /** Determine if the source part has changed since `last_updated_at`
+  /** Determine if the source part has changed since `last_polled_at`
    *
    */
-  async hasRepoChangedSince(last_updated_at, token) {
-    if (last_updated_at === undefined || !last_updated_at) {
-      throw new Error('`last_updated_at` must be given.');
+  async hasRepoChangedSince(last_polled_at, token) {
+    if (last_polled_at === undefined || !last_polled_at) {
+      throw new Error('`last_polled_at` must be given.');
     }
-    const last_updated = moment(last_updated_at);
-    const since = last_updated.toISOString();
+    const last_polled = moment(last_polled_at);
+    const since = last_polled.toISOString();
     const { owner, name } = parseGitHubRepoUrl(this.repoUrl);
 
     const options = {
       token,
       headers: {
-        'If-Modified-Since': last_updated.format('ddd, MM MMM YYYY HH:mm:ss [GMT]')
+        'If-Modified-Since': last_polled.format('ddd, MM MMM YYYY HH:mm:ss [GMT]')
       },
       json: true
     };
@@ -248,7 +249,7 @@ export class GitSourcePart {
           // here:
           const date_string = response.body.commit.commit.committer.date;
           const branch_date = moment(date_string);
-          return branch_date.isAfter(last_updated);
+          return branch_date.isAfter(last_polled);
         }
         case 304:
           // `If-Modified-Since` in action, cache hit, no changes.

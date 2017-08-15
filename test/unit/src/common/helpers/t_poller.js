@@ -255,8 +255,8 @@ describe('Poller helpers', function() {
       });
 
       it('returns true', async function() {
-        const last_updated_at = 1501762400000;
-        const changed = await hasRepoChanged(repositoryUrl, last_updated_at);
+        const last_polled_at = 1501762400000;
+        const changed = await hasRepoChanged(repositoryUrl, last_polled_at);
         expect(changed).toBe(true);
       });
     });
@@ -271,8 +271,8 @@ describe('Poller helpers', function() {
       });
 
       it('returns false', async function() {
-        const last_updated_at = 1501762400000;
-        const changed = await hasRepoChanged(repositoryUrl, last_updated_at);
+        const last_polled_at = 1501762400000;
+        const changed = await hasRepoChanged(repositoryUrl, last_polled_at);
         expect(changed).toBe(false);
       });
     });
@@ -288,8 +288,8 @@ describe('Poller helpers', function() {
 
       it('raises an error', async function() {
         try {
-          const last_updated_at = 1501762400000;
-          const changed = await hasRepoChanged(repositoryUrl, last_updated_at);
+          const last_polled_at = 1501762400000;
+          const changed = await hasRepoChanged(repositoryUrl, last_polled_at);
           assert(false, 'Expected error; got %s instead', changed);
         } catch (error) {
           expect(error.message).toBe(`${repositoryUrl} (404): Not Found`);
@@ -297,7 +297,7 @@ describe('Poller helpers', function() {
       });
     });
 
-    context('when last_updated_at is missing', function() {
+    context('when last_polled_at is missing', function() {
       const repositoryUrl = 'https://github.com/anowner/aname';
 
       it('raises an error', async function() {
@@ -305,12 +305,12 @@ describe('Poller helpers', function() {
           const changed = await hasRepoChanged(repositoryUrl);
           assert(false, 'Expected error; got %s instead', changed);
         } catch (error) {
-          expect(error.message).toBe('`last_updated_at` must be given.');
+          expect(error.message).toBe('`last_polled_at` must be given.');
         }
       });
     });
 
-    context('when last_updated_at is empty', function() {
+    context('when last_polled_at is empty', function() {
       const repositoryUrl = 'https://github.com/anowner/aname';
 
       it('raises an error', async function() {
@@ -318,7 +318,7 @@ describe('Poller helpers', function() {
           const changed = await hasRepoChanged(repositoryUrl, '');
           assert(false, 'Expected error; got %s instead', changed);
         } catch (error) {
-          expect(error.message).toBe('`last_updated_at` must be given.');
+          expect(error.message).toBe('`last_polled_at` must be given.');
         }
       });
     });
