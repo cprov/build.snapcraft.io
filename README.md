@@ -20,13 +20,13 @@ Go and [register a new OAuth application](https://github.com/settings/applicatio
 
 Once you've created the application, you should be given the client id and the client secret. **Make a note of these**.
 
-Additionally, if the intention is to run the GitHub repository poller (`npm run poll-repositories`), a API token should be acquired so the API calls are submitted to an acceptable rate-limit (5k req/s instead of 60 req/s for anonymous access)::
+Additionally, if the intention is to run the GitHub repository poller (`npm run poll-repositories`), a API token should be acquired so the API calls are submitted to an acceptable rate-limit (5k req/h instead of 60 req/h for anonymous access)::
 
   curl -s -u '<GH_USER>' https://api.github.com/authorizations \
     -H 'Content-Type: application/json' \
     -H 'X-GitHub-OTP: <GH 2FA CODE IF ENABLED>' \
-    -d '{"client_id": "c54ee622a3fa9622701f", \
-         "client_secret": "2a6010d06c7c90b1fcf6518d72eac0bab64cf35b", \
+    -d '{"client_id": "<CLIENT-ID", \
+         "client_secret": "<CLIENT-SECRET>", \
 	 "note": "Build.s.io poller token"}' | jq '.token' -r
 
 `curl` will ask for you GitHub password (basic-auth) and acquire a 40-char authorization token. Make note of it, it should be set in the running environment as `GITHUB_AUTH_CLIENT_TOKEN`.
@@ -105,9 +105,6 @@ name, using 'build-snapcraft-io' restores sanity.
 
 ## Updating dependencies
 
-Managing dependencies with npm can be a little .... interesting, especially if
-you're not used to the peculiarities of the nodejs toolchain.
-
 First, you must add or update the dependency in package.json. This file
 contains both a 'dependencies' section (for run-time dependencies) and a
 'devDependencies' section (for build-time dependencies). Edit the appropriate
@@ -116,7 +113,6 @@ numbers are specified using a [special syntax](https://docs.npmjs.com/misc/semve
 
 Next, run `npm update` to get the new dependencies locally.
 
-Finally, run `./node_modules/shonkwrap/shonkwrap` (I wish I was joking) to
-update the `npm-shrinkwrap.json` file with the new frozen dependency set.
-The `shonkwrap` command wraps `npm shrinkwrap`, but removes the 'resolved'
-keys from the final shrinkwrapped file.
+Finally, run `npm run shonkwrap` to update the `npm-shrinkwrap.json` file with
+the new frozen dependency set. The `shonkwrap` command wraps `npm shrinkwrap`,
+but removes the 'resolved' keys from the final shrinkwrapped file.
