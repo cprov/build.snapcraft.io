@@ -80,7 +80,9 @@ After about 20 seconds, the web application should be available at <http://127.0
 ### Run the repository poller script
 
 ```
-npm run poll-repositories -- --env=environments/dev.env
+$ npm run build:scripts
+...
+$ npm run poll-repositories -- --env=environments/dev.env
 ```
 
 ## lxd container setup
