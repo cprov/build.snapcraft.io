@@ -10,7 +10,7 @@ import {
   hasRepoChanged,
   pollRepositories,
   GitSourcePart
-} from '../../../../../src/common/helpers/poller';
+} from '../../../../../src/server/scripts/poller';
 
 
 describe('Poller helpers', function() {

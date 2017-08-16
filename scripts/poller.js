@@ -1,5 +1,5 @@
 import 'babel-polyfill';
 
-import { pollRepositories } from '../common/helpers/poller';
+import { pollRepositories } from '../server/scripts/poller';
 
 pollRepositories();

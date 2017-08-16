@@ -1,18 +1,20 @@
 import moment from 'moment';
+import raven from 'raven';
 
-import logging from '../../server/logging';
-import { conf } from '../../server/helpers/config';
-import db from '../../server/db';
+import logging from '../logging';
+import { conf } from '../helpers/config';
+import db from '../db';
 import {
   getGitHubRepoUrl,
   parseGitHubRepoUrl
-} from './github-url';
-import requestGitHub from '../../server/helpers/github';
-import { internalGetSnapcraftYaml } from '../../server/handlers/launchpad';
-import raven from 'raven';
+} from '../../common/helpers/github-url';
+import requestGitHub from '../helpers/github';
+import { internalGetSnapcraftYaml } from '../handlers/launchpad';
+
 
 const logger = logging.getLogger('poller');
 raven.config(conf.get('SENTRY_DSN')).install();
+
 
 // Process all Repository (DB) models synchronously. Check for changes using
 // `checkSnapRepository` and if changed request a LP snap build and mark

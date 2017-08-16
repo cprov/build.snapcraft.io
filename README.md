@@ -25,7 +25,7 @@ Additionally, if the intention is to run the GitHub repository poller (`npm run 
   curl -s -u '<GH_USER>' https://api.github.com/authorizations \
     -H 'Content-Type: application/json' \
     -H 'X-GitHub-OTP: <GH 2FA CODE IF ENABLED>' \
-    -d '{"client_id": "<CLIENT-ID", \
+    -d '{"client_id": "<CLIENT-ID>", \
          "client_secret": "<CLIENT-SECRET>", \
 	 "note": "Build.s.io poller token"}' | jq '.token' -r
 

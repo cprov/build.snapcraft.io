@@ -7,6 +7,7 @@
     "start": "npm run migrate:latest && node ./webpack/webpack-dev-server",
     "start-build": "node dist/server/",
     "build": "./scripts/build.sh",
+    "build:scripts": "babel --out-dir=dist src scripts/poller.js --copy-files",
     "build:vanilla-modules": "node-sass --include-path ./node_modules -o ./src/common/style/vanilla/css ./src/common/style/vanilla/",
     "lint": "eslint -c .eslintrc.js '**/*.js'",
     "test": "npm run test:setup-db && nyc npm run test:unit && npm run test:routes && npm run lint",
@@ -19,7 +20,7 @@
     "migrate:rollback": "knex migrate:rollback",
     "shonkwrap": "shonkwrap",
     "generate-badges": "node scripts/badges.js",
-    "poll-repositories": "babel --out-dir=dist src scripts/poller.js --copy-files 2>&1 > /dev/null && node dist/scripts/poller.js"
+    "poll-repositories": "node dist/scripts/poller.js"
   },
   "repository": {
     "type": "git",
