@@ -1,4 +1,4 @@
-import expect, { assert } from 'expect';
+import expect from 'expect';
 import nock from 'nock';
 import sinon from 'sinon';
 
@@ -7,13 +7,12 @@ import db from '../../../../../src/server/db';
 import {
   checkSnapRepository,
   extractPartsToPoll,
-  hasRepoChanged,
   pollRepositories,
   GitSourcePart
 } from '../../../../../src/server/scripts/poller';
 
 
-describe('Poller helpers', function() {
+describe('Poller script helpers', function() {
 
   afterEach(function() {
     nock.cleanAll();
@@ -36,7 +35,7 @@ describe('Poller helpers', function() {
       });
     });
 
-    context('when the repository has no snapcraft.yaml', function() {
+    context('when the repository has no name in snapcraft.yaml', function() {
       it('gets skipped', () => {
         return db.transaction(async (trx) => {
           const db_user = db.model('GitHubUser').forge({
@@ -64,7 +63,7 @@ describe('Poller helpers', function() {
       });
     });
 
-    context('when the repository has name registered in the store', function() {
+    context('when the repository has no name registered in the store', function() {
       it('gets skipped', () => {
         return db.transaction(async (trx) => {
           const db_user = db.model('GitHubUser').forge({
@@ -79,6 +78,34 @@ describe('Poller helpers', function() {
             name: 'aname',
             snapcraft_name: 'foo',
             store_name: null,
+            registrant_id: db_user.get('id')
+          });
+          await db_repo.save({}, { transacting: trx });
+        }).then(async () => {
+          let checker = sinon.spy();
+          let builder = sinon.spy();
+          await pollRepositories(checker, builder);
+          expect(checker.callCount).toBe(0);
+          expect(builder.callCount).toBe(0);
+        });
+      });
+    });
+
+    context('when the repository snapcraft name does not match the one in the store', function() {
+      it('gets skipped', () => {
+        return db.transaction(async (trx) => {
+          const db_user = db.model('GitHubUser').forge({
+            github_id: 1234,
+            name: null,
+            login: 'person',
+            last_login_at: new Date()
+          });
+          await db_user.save({}, { transacting: trx });
+          const db_repo = db.model('Repository').forge({
+            owner: 'anowner',
+            name: 'aname',
+            snapcraft_name: 'foo',
+            store_name: 'bar',
             registrant_id: db_user.get('id')
           });
           await db_repo.save({}, { transacting: trx });
@@ -153,7 +180,6 @@ describe('Poller helpers', function() {
 
   });
 
-
   describe('GitSourcePart helper class construction', function() {
 
     const repoUrl = 'https://github.com/anowner/aname';
@@ -166,21 +192,21 @@ describe('Poller helpers', function() {
     it('can be constructed with just a git url', () => {
       var foo = new GitSourcePart(repoUrl);
       expect(foo.repoUrl).toEqual(repoUrl);
-      expect(foo.branch).toEqual('master');
-      expect(foo.tag).toEqual(null);
+      expect(foo.branch).toBe(undefined);
+      expect(foo.tag).toBe(undefined);
     });
 
     it('can be constructed with a git url and branch name', () => {
       var foo = new GitSourcePart(repoUrl, 'mybranch');
       expect(foo.repoUrl).toEqual(repoUrl);
       expect(foo.branch).toEqual('mybranch');
-      expect(foo.tag).toEqual(null);
+      expect(foo.tag).toBe(undefined);
     });
 
     it('can be constructed with a git url and tag name', () => {
       var foo = new GitSourcePart(repoUrl, undefined, 'v1.0.0');
       expect(foo.repoUrl).toEqual(repoUrl);
-      expect(foo.branch).toEqual('master');
+      expect(foo.branch).toBe(undefined);
       expect(foo.tag).toEqual('v1.0.0');
     });
 
@@ -202,7 +228,7 @@ describe('Poller helpers', function() {
       var part = GitSourcePart.fromSnapcraftPart(
         { source: 'https://github.com/foo/bar.git' });
       expect(part.repoUrl).toEqual('https://github.com/foo/bar.git');
-      expect(part.branch).toEqual('master');
+      expect(part.branch).toBe(undefined);
       expect(part.tag).toBe(undefined);
     });
 
@@ -233,98 +259,6 @@ describe('Poller helpers', function() {
     });
   });
 
-
-  describe('hasRepoChanged', function() {
-    let ghApi;
-
-    beforeEach(function() {
-      ghApi = nock(conf.get('GITHUB_API_ENDPOINT'));
-    });
-
-    afterEach(function() {
-      ghApi.done();
-    });
-
-    context('when there are changes', function() {
-      const repositoryUrl = 'https://github.com/anowner/aname';
-
-      beforeEach(function() {
-        ghApi
-          .get(/\/repos\/anowner\/aname\/commits\?since=2017-08-03T12%3A13%3A20\.000Z.*/)
-          .reply(200, [ { sha: 'something' } ]);
-      });
-
-      it('returns true', async function() {
-        const last_polled_at = 1501762400000;
-        const changed = await hasRepoChanged(repositoryUrl, last_polled_at);
-        expect(changed).toBe(true);
-      });
-    });
-
-    context('when there are no changes', function() {
-      const repositoryUrl = 'https://github.com/anowner/aname';
-
-      beforeEach(function() {
-        ghApi
-          .get(/\/repos\/anowner\/aname\/commits\?since=.*/)
-          .reply(200, []);
-      });
-
-      it('returns false', async function() {
-        const last_polled_at = 1501762400000;
-        const changed = await hasRepoChanged(repositoryUrl, last_polled_at);
-        expect(changed).toBe(false);
-      });
-    });
-
-    context('when repository lookup fails', function() {
-      const repositoryUrl = 'https://github.com/anowner/aname';
-
-      beforeEach(function() {
-        ghApi
-          .get(/\/repos\/anowner\/aname\/commits\?since=.*/)
-          .reply(404, { message: 'Not Found' });
-      });
-
-      it('raises an error', async function() {
-        try {
-          const last_polled_at = 1501762400000;
-          const changed = await hasRepoChanged(repositoryUrl, last_polled_at);
-          assert(false, 'Expected error; got %s instead', changed);
-        } catch (error) {
-          expect(error.message).toBe(`${repositoryUrl} (404): Not Found`);
-        }
-      });
-    });
-
-    context('when last_polled_at is missing', function() {
-      const repositoryUrl = 'https://github.com/anowner/aname';
-
-      it('raises an error', async function() {
-        try {
-          const changed = await hasRepoChanged(repositoryUrl);
-          assert(false, 'Expected error; got %s instead', changed);
-        } catch (error) {
-          expect(error.message).toBe('`last_polled_at` must be given.');
-        }
-      });
-    });
-
-    context('when last_polled_at is empty', function() {
-      const repositoryUrl = 'https://github.com/anowner/aname';
-
-      it('raises an error', async function() {
-        try {
-          const changed = await hasRepoChanged(repositoryUrl, '');
-          assert(false, 'Expected error; got %s instead', changed);
-        } catch (error) {
-          expect(error.message).toBe('`last_polled_at` must be given.');
-        }
-      });
-    });
-
-  });
-
   describe('checkSnapRepository', function() {
     let ghApi;
 
@@ -340,8 +274,11 @@ describe('Poller helpers', function() {
 
       beforeEach(function() {
         ghApi
-          .get(/\/repos\/anowner\/aname\/commits.*/)
-          .reply(200, [ { sha: 'some_sha' } ]);
+          .get(/\/repos\/anowner\/aname.*/)
+          .reply(200, { default_branch: 'abranch' });
+        ghApi
+          .get(/\/repos\/anowner\/aname\/branches\/abranch.*/)
+          .reply(200, { commit: { commit: { committer: { date: 1501762400001 } } } });
       });
 
       it('returns true', async function() {
@@ -354,16 +291,21 @@ describe('Poller helpers', function() {
 
       beforeEach(function() {
         ghApi
-          .get(/\/repos\/anowner\/aname\/commits.*/)
-          .reply(200, []);
+          .get(/\/repos\/anowner\/aname.*/)
+          .reply(200, { default_branch: 'abranch' });
+        ghApi
+          .get(/\/repos\/anowner\/aname\/branches\/abranch.*/)
+          .reply(200, { commit: { commit: { committer: { date: 1501762300000 } } } });
         ghApi
           .get(/\/repos\/anowner\/aname\/contents.*/)
           .reply(200, 'parts:\n  foo:\n    source-type: git\n    ' +
                       'source: https://github.com/some/part.git');
         ghApi
-          .get(/\/repos\/some\/part\/commits.*/)
-          .reply(200, [ { sha: 'some-sha' } ]);
-
+          .get(/\/repos\/some\/part.*/)
+          .reply(200, { default_branch: 'part_branch' });
+        ghApi
+          .get(/\/repos\/some\/part\/branches\/part_branch.*/)
+          .reply(200, { commit: { commit: { committer: { date: 1501762400001 } } } });
       });
 
       it('returns true', async function() {
@@ -376,16 +318,35 @@ describe('Poller helpers', function() {
 
       beforeEach(function() {
         ghApi
-          .get(/\/repos\/anowner\/aname\/commits.*/)
-          .reply(200, []);
+          .get(/\/repos\/anowner\/aname.*/)
+          .reply(200, { default_branch: 'abranch' });
+        ghApi
+          .get(/\/repos\/anowner\/aname\/branches\/abranch.*/)
+          .reply(200, { commit: { commit: { committer: { date: 1501762300000 } } } });
         ghApi
           .get(/\/repos\/anowner\/aname\/contents.*/)
           .reply(200, 'parts:\n  foo:\n    source-type: git\n    ' +
                       'source: https://github.com/some/part.git');
         ghApi
-          .get(/\/repos\/some\/part\/commits.*/)
-          .reply(200, []);
+          .get(/\/repos\/some\/part.*/)
+          .reply(200, { default_branch: 'part_branch' });
+        ghApi
+          .get(/\/repos\/some\/part\/branches\/part_branch.*/)
+          .reply(200, { commit: { commit: { committer: { date: 1501762300000 } } } });
+      });
 
+      it('returns false', async function() {
+        const needs_build = await checkSnapRepository('anowner', 'aname', 1501762400000);
+        expect(needs_build).toBe(false);
+      });
+    });
+
+    context('when the snap repository lookup fails', function() {
+
+      beforeEach(function() {
+        ghApi
+          .get(/\/repos\/anowner\/aname.*/)
+          .reply(404, {});
       });
 
       it('returns false', async function() {
@@ -398,8 +359,11 @@ describe('Poller helpers', function() {
 
       beforeEach(function() {
         ghApi
-          .get(/\/repos\/anowner\/aname\/commits.*/)
-          .reply(200, []);
+          .get(/\/repos\/anowner\/aname.*/)
+          .reply(200, { default_branch: 'abranch' });
+        ghApi
+          .get(/\/repos\/anowner\/aname\/branches\/abranch.*/)
+          .reply(200, { commit: { commit: { committer: { date: 1501762300000 } } } });
         ghApi
           .get(/\/repos\/anowner\/aname\/contents.*/)
           .reply(404, {});
@@ -410,7 +374,6 @@ describe('Poller helpers', function() {
         expect(needs_build).toBe(false);
       });
     });
-
 
   });
 

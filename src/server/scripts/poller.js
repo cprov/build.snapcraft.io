@@ -10,6 +10,7 @@ import {
 } from '../../common/helpers/github-url';
 import requestGitHub from '../helpers/github';
 import { internalGetSnapcraftYaml } from '../handlers/launchpad';
+import { getDefaultBranch } from '../handlers/github';
 
 
 const logger = logging.getLogger('poller');
@@ -43,12 +44,20 @@ export const pollRepositories = (checker, builder) => {
         const last_polled_at = repo.get('polled_at') || repo.get('updated_at');
 
         if (!repo.get('snapcraft_name')) {
-          logger.info(`${owner}/${name}: NO SNAPCRAFT.YAML`);
+          logger.info(`${owner}/${name}: NO NAME IN SNAPCRAFT.YAML`);
           return;
         }
 
         if (!repo.get('store_name')) {
-          logger.info(`${owner}/${name}: NOT REGISTERED`);
+          logger.info(`${owner}/${name}: NO NAME REGISTERED IN THE STORE`);
+          return;
+        }
+
+        const store_name = repo.get('store_name');
+        const snapcraft_name = repo.get('snapcraft_name');
+        if (store_name != snapcraft_name) {
+          logger.info(`${owner}/${name}: STORE/SNAPCRAFT NAME MISMATCH ` +
+                      `(${store_name} != ${snapcraft_name})`);
           return;
         }
 
@@ -76,7 +85,7 @@ export const pollRepositories = (checker, builder) => {
 export const checkSnapRepository = async (owner, name, last_polled_at) => {
   const token = conf.get('GITHUB_AUTH_CLIENT_TOKEN');
   const repo_url = getGitHubRepoUrl(owner, name);
-  if (await hasRepoChanged(repo_url, last_polled_at, token)) {
+  if (await new GitSourcePart(repo_url).hasRepoChangedSince(last_polled_at, token)) {
     logger.info(`The ${owner}/${name} repository has changed.`);
     return true;
   }
@@ -113,40 +122,6 @@ export const buildSnapRepository = async (owner, name) => {
 };
 
 
-// Whether a given (GitHub) repository has new commits since 'last_polled_at'.
-export const hasRepoChanged = async (repositoryUrl, last_polled_at, token) => {
-  if (last_polled_at === undefined || !last_polled_at) {
-    throw new Error('`last_polled_at` must be given.');
-  }
-  const last_polled = moment(last_polled_at);
-  const since = last_polled.toISOString();
-  const { owner, name } = parseGitHubRepoUrl(repositoryUrl);
-  const uri = `/repos/${owner}/${name}/commits?since=${since}`;
-  const options = {
-    token,
-    headers: {
-      'If-Modified-Since': last_polled.format('ddd, MM MMM YYYY HH:mm:ss [GMT]')
-    },
-    json: true
-  };
-
-  const response = await requestGitHub.get(uri, options);
-
-  switch (response.statusCode) {
-    case 200:
-      // If the (JSON encoded) body is not an empty list.
-      return response.body.length > 0;
-    case 304:
-      // `If-Modified-Since` in action, cache hit, no changes.
-      return false;
-    default:
-      // Bail, unexpected response.
-      throw new Error(
-        `${repositoryUrl} (${response.statusCode}): ${response.body.message}`);
-  }
-};
-
-
 // Extracts unique GH repository URLs from a given (parsed) snapcraft.yaml
 export function extractPartsToPoll(snapcraft_yaml) {
   const parts = Object.values(snapcraft_yaml.parts || {});
@@ -164,9 +139,6 @@ export class GitSourcePart {
   constructor(repoUrl, branch, tag) {
     if (repoUrl === undefined) {
       throw new Error('Required parameter: repoUrl');
-    }
-    if (branch === undefined) {
-      branch = 'master';
     }
     this.repoUrl = repoUrl;
     this.branch = branch;
@@ -214,7 +186,6 @@ export class GitSourcePart {
       throw new Error('`last_polled_at` must be given.');
     }
     const last_polled = moment(last_polled_at);
-    const since = last_polled.toISOString();
     const { owner, name } = parseGitHubRepoUrl(this.repoUrl);
 
     const options = {
@@ -225,26 +196,20 @@ export class GitSourcePart {
       json: true
     };
 
-    if (this.branch === 'master' && this.tag == undefined) {
-      // check master branch, no tag.
-      const uri = `/repos/${owner}/${name}/commits?since=${since}`;
-      const response = await requestGitHub.get(uri, options);
+    if (this.tag == undefined) {
+      // check the default branch, no tag.
 
-      switch (response.statusCode) {
-        case 200:
-          // If the (JSON encoded) body is not an empty list.
-          return response.body.length > 0;
-        case 304:
-          // `If-Modified-Since` in action, cache hit, no changes.
+      if (this.branch === undefined) {
+        try {
+          this.branch = await getDefaultBranch(this.repoUrl, token);
+        } catch (e) {
+          // TODO: we should log the reason why the context repository
+          // was considered unchanged. If it's a 404 (repository disapeared),
+          // we should cleanup (LP, DB and memcache).
           return false;
-        default:
-          // Bail, unexpected response.
-          throw new Error(
-            `${this.repoUrl} (${response.statusCode}): ${response.body.message}`);
+        }
       }
-    }
-    else if (this.tag == undefined) {
-      // check custom branch, no tag.
+
       const uri = `/repos/${owner}/${name}/branches/${this.branch}`;
       const response = await requestGitHub.get(uri, options);
 
