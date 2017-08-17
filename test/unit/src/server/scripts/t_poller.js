@@ -5,6 +5,7 @@ import sinon from 'sinon';
 import { conf } from '../../../../../src/server/helpers/config';
 import db from '../../../../../src/server/db';
 import {
+  buildSnapRepository,
   checkSnapRepository,
   extractPartsToPoll,
   pollRepositories,
@@ -377,6 +378,60 @@ describe('Poller script helpers', function() {
 
   });
 
+  describe('buildSnapRepository', function() {
+    const LP_API_URL = conf.get('LP_API_URL');
+    const LP_API_USERNAME = conf.get('LP_API_USERNAME');
+    let lp, db_repo;
+
+    beforeEach(async () => {
+      await db.model('GitHubUser').query('truncate').fetch();
+      await db.model('Repository').query('truncate').fetch();
+      await db.transaction(async (trx) => {
+        const db_user = db.model('GitHubUser').forge({
+          github_id: 1234,
+          name: null,
+          login: 'person',
+          last_login_at: new Date()
+        });
+        await db_user.save({}, { transacting: trx });
+        db_repo = db.model('Repository').forge({
+          owner: 'anowner',
+          name: 'aname',
+          snapcraft_name: 'foo',
+          store_name: 'foo',
+          registrant_id: db_user.get('id')
+        });
+        await db_repo.save({}, { transacting: trx });
+      });
+      lp = nock(LP_API_URL)
+        .defaultReplyHeaders({ 'Content-Type': 'application/json' });
+    });
+
+    afterEach(function() {
+      lp.done();
+    });
+
+    context('when LP is properly setup', function() {
+
+      it('the snap is build', async () => {
+        lp.get('/devel/+snaps')
+          .query({ 'ws.op': 'findByURL', url: 'https://github.com/anowner/aname' })
+          .reply(200, [{
+            self_link: `${LP_API_URL}/devel/a_snap`,
+            owner_link: `/~${LP_API_USERNAME}`,
+            auto_build: true
+          }]);
+        lp.post('/devel/a_snap')
+          .reply(200, {});
+
+        const now = 1502946578000;
+        await buildSnapRepository('anowner', 'aname', now);
+        await db_repo.refresh();
+        expect(db_repo.get('polled_at')).toEqual(now);
+      });
+    });
+
+  });
 
   context('extractPartsToPoll', () => {
 
