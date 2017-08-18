@@ -22,8 +22,8 @@ describe('Poller script helpers', function() {
   describe('pollRepositories', function() {
 
     beforeEach(async () => {
-      await db.model('GitHubUser').query('truncate').fetch();
-      await db.model('Repository').query('truncate').fetch();
+      await db.model('Repository').query().truncate();
+      await db.model('GitHubUser').query().del();
     });
 
     context('when there are no repositories', function() {
@@ -384,8 +384,8 @@ describe('Poller script helpers', function() {
     let lp, db_repo;
 
     beforeEach(async () => {
-      await db.model('GitHubUser').query('truncate').fetch();
-      await db.model('Repository').query('truncate').fetch();
+      await db.model('Repository').query().truncate();
+      await db.model('GitHubUser').query().del();
       await db.transaction(async (trx) => {
         const db_user = db.model('GitHubUser').forge({
           github_id: 1234,
@@ -424,10 +424,14 @@ describe('Poller script helpers', function() {
         lp.post('/devel/a_snap')
           .reply(200, {});
 
-        const now = 1502946578000;
-        await buildSnapRepository('anowner', 'aname', now);
+        expect(db_repo.get('polled_at')).toBe(undefined);
+        await buildSnapRepository('anowner', 'aname');
         await db_repo.refresh();
-        expect(db_repo.get('polled_at')).toEqual(now);
+        // TODO: persuade sqlite + knex + bookshelf to deal with datetime
+        // column properly, like postgres would do. There we can check it
+        // `.toBeA(Date)`. Also don't feel tempted to mock the clock here
+        // (sinon.useFakeTimers()) it freezes LP promises and nothing works.
+        expect(db_repo.get('polled_at')).toNotBe(undefined);
       });
     });
 

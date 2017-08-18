@@ -116,7 +116,7 @@ export const checkSnapRepository = async (owner, name, last_polled_at) => {
  *
  * Return a `Promise` with the result of the operation.
  */
-export const buildSnapRepository = async (owner, name, now) => {
+export const buildSnapRepository = async (owner, name) => {
   // TODO: annotate why the repository is being built (change on the main repo
   // or in parts? which part ?).
   const repositoryUrl = getGitHubRepoUrl(owner, name);
@@ -129,14 +129,12 @@ export const buildSnapRepository = async (owner, name, now) => {
     return Promise.reject(e);
   }
 
-  const _now = now || new Date().getTime();
-
   return db.transaction(async (trx) => {
     const row = await db.model('Repository')
       .where({ owner, name })
       .fetch({ transacting: trx });
     await row.save(
-      { polled_at: _now }, { method: 'update', transacting: trx });
+      { polled_at: new Date() }, { method: 'update', transacting: trx });
   });
 };
 
