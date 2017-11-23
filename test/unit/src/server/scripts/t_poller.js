@@ -421,6 +421,9 @@ describe('Poller script helpers', function() {
           'non-git': {
             'source': 'https://code.launchpad.net/foo/bar'
           },
+          'gh-download': {
+            'source': 'https://github.com/foo/bar/releases/download/release-1/a.deb'
+          },
           'gh-2': {
             'source': 'https://github.com/foo/zoing.git'
           }
