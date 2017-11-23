@@ -412,7 +412,7 @@ describe('Poller script helpers', function() {
     it('only extracts GH repos', () => {
       const snapcraft_yaml = {
         parts: {
-          'gh': {
+          'gh-full': {
             'source': 'https://github.com/foo/bar.git'
           },
           'non-gh': {
@@ -424,15 +424,15 @@ describe('Poller script helpers', function() {
           'gh-download': {
             'source': 'https://github.com/foo/bar/releases/download/release-1/a.deb'
           },
-          'gh-2': {
-            'source': 'https://github.com/foo/zoing.git'
+          'gh-short': {
+            'source': 'https://github.com/foo/zoing'
           }
         }
       };
       const parts = extractPartsToPoll(snapcraft_yaml);
       expect(parts.length).toBe(2);
       expect(parts[0].repoUrl).toEqual('https://github.com/foo/bar.git');
-      expect(parts[1].repoUrl).toEqual('https://github.com/foo/zoing.git');
+      expect(parts[1].repoUrl).toEqual('https://github.com/foo/zoing');
     });
 
   });
